@@ -1,95 +1,112 @@
 import { AdjList } from "./types.ts";
-import { BidirectionalGraph, DAG_Small, DisconnectedGraph, EmptyGraph, EulerianCycleGraph, EulerianPathAndCycleGraph, EulerianPathGraph, LinearGraph, MixedCycleGraph, ReverseDAG } from "./graphs.ts";
 
-const countInOutDegrees = (graph: AdjList): [number[], number[]] => {
-  const inwards: number[] = new Array(graph.length);
-  const outwards: number[] = new Array(graph.length);
+import { BidirectionalGraph, DAG_Small, EulerianCycleGraph, EulerianPathGraph, LinearGraph, MixedCycleGraph, ReverseDAG } from "./graphs.ts";
+
+const countInOutDegrees = (graph: AdjList): [number[], number[], number] => {
+  const indeg: number[] = new Array(graph.length);
+  const outdeg: number[] = new Array(graph.length);
+  let numberOfEdges: number = 0;
+  indeg.fill(0);
+  outdeg.fill(0);
 
   for (let vertex = 0; vertex < graph.length; vertex++) {
     const adjacentVertices = graph[vertex];
 
-    outwards[vertex] = adjacentVertices.length;
+    outdeg[vertex] = adjacentVertices.length;
+    numberOfEdges += adjacentVertices.length;
 
     for (let adjacentVertice of adjacentVertices) {
-      inwards[adjacentVertice] = inwards[adjacentVertice]
-        ? inwards[adjacentVertice] + 1
+      indeg[adjacentVertice] = indeg[adjacentVertice]
+        ? indeg[adjacentVertice] + 1
         : 1;
     }
   }
 
-  return [inwards, outwards];
+  return [indeg, outdeg, numberOfEdges];
 };
 
-const hasEulerianPath = (inwards: number[], outwards: number[]): boolean => {
-  let start_nodes = 0;
-  let end_nodes = 0;
+const findEulerianPathStartNode = (indeg: number[], outdeg: number[]): number | null => {
+  const start: number[] = [];
+  const end: number[] = [];
 
-  for (let i = 0; i < inwards.length; i++) {
-    if (outwards[i] - inwards[i] > 1 || inwards[i] - outwards[i] > 1) {
-      return false;
+  for (let i = 0; i < indeg.length; i++) {
+    if (indeg[i] === outdeg[i] - 1) {
+      start.push(i);
+      continue;
+    }
+    if (indeg[i] === outdeg[i] + 1) {
+      end.push(i);
+      continue;
+    }
+    if (indeg[i] === outdeg[i]) {
+      continue;
     }
 
-    if (outwards[i] - inwards[i] === 1) {
-      start_nodes++;
-    }
-
-    if (inwards[i] - outwards[i] === 1) {
-      end_nodes++;
-    }
+    return null;
   }
 
-  return end_nodes === 0 && start_nodes === 0 || end_nodes === 1 && start_nodes === 1;
-};
-
-const findStartNode = (inwards: number[], outwards: number[]): number => {
-  let start = 0;
-
-  for (let i = 0; i < inwards.length; i++) {
-    if (outwards[i] - inwards[i] == 1) {
-      return i;
-    }
-
-    if (outwards[i] > 0) {
-      start = i;
-    }
+  if (start.length === 1 && end.length === 1) {
+    return start[0];
   }
-
-  return start;
+  if (start.length === 0 && end.length === 0) {
+    return 0;
+  }
+  return null;
 }
 
-const dfs = (graph: readonly number[][], node: number, outwards: number[], path: number[] = []): number[] => {
-  while (outwards[node] > 0) {
-    const nextNode = graph[node][--outwards[node]];
+const findEulerianPaths = (
+  graph: AdjList,
+  outdeg: number[],
+  at: number,
+  numberOfEdges: number,
+  path: number[] = [],
+  paths: number[][] = [],
+  blocked: Set<string> = new Set()
+): number[][] => {
 
-    dfs(graph, nextNode, outwards, path);
+  path.push(at);
+
+  if (path.length === numberOfEdges + 1) {
+    paths.push([...path]);
+    return paths;
   }
 
-  path.unshift(node);
+  for (let index = outdeg[at] - 1; index >= 0; index--) {
+    const node = graph[at][index];
 
-  return path;
+    if (blocked.has(at.toString() + node.toString())) {
+      continue;
+    }
+
+    blocked.add(at.toString() + node.toString());
+    findEulerianPaths(graph, outdeg, node, numberOfEdges, path, paths, blocked);
+    path.pop();
+    blocked.delete(at.toString() + node.toString());
+  }
+
+  return paths;
 };
 
-const findEulerPath = (graph: AdjList): number[] | null => {
+const findEulerPath = (graph: AdjList): number[][] | null => {
   if (graph == null || graph?.length === 0) {
     return null;
   }
 
-  const [inwards, outwards] = countInOutDegrees(graph);
+  const [indeg, outdeg, numberOfEdges] = countInOutDegrees(graph);
 
-  if (!hasEulerianPath(inwards, outwards)) {
+  const startVertex = findEulerianPathStartNode(indeg, outdeg);
+
+  if (startVertex == null) {
     return null;
   }
 
-  return dfs(graph, findStartNode(inwards, outwards), outwards);
+  return findEulerianPaths(graph, outdeg, startVertex, numberOfEdges);
 };
 
-console.log(findEulerPath(EmptyGraph));
-console.log(findEulerPath(DisconnectedGraph));
 console.log(findEulerPath(DAG_Small));
 console.log(findEulerPath(MixedCycleGraph));
 console.log(findEulerPath(BidirectionalGraph));
 console.log(findEulerPath(ReverseDAG));
 console.log(findEulerPath(LinearGraph));
-console.log(findEulerPath(EulerianPathGraph));
+console.log(findEulerPath(EulerianPathGraph)?.map(path => path.map(v => v + 1)));
 console.log(findEulerPath(EulerianCycleGraph));
-console.log(findEulerPath(EulerianPathAndCycleGraph));
